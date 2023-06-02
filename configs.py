@@ -119,3 +119,49 @@ CONFIG_MAP['ae-cat-mel_2bar_big'] = Config(
     encoder_train=False,
     decoder_train=False
 )
+
+# Trio Models
+trio_16bar_converter = data.TrioConverter(
+    steps_per_quarter=4,
+    slice_bars=16,
+    gap_bars=2)
+
+CONFIG_MAP['hierdec-trio_16bar'] = Config(
+    model=SmallMusicVAE(
+        lstm_models.BidirectionalLstmEncoder(),
+        lstm_models.HierarchicalLstmDecoder(
+            lstm_models.SplitMultiOutLstmDecoder(
+                core_decoders=[
+                    lstm_models.CategoricalLstmDecoder(),
+                    lstm_models.CategoricalLstmDecoder(),
+                    lstm_models.CategoricalLstmDecoder()],
+                output_depths=[
+                    90,  # melody
+                    90,  # bass
+                    512,  # drums
+                ]),
+            level_lengths=[16, 16],
+            disable_autoregression=True)),
+    hparams=merge_hparams(
+        lstm_models.get_default_hparams(),
+        HParams(
+            batch_size=256,
+            max_seq_len=256,
+            z_size=512,
+            encoded_z_size=16,
+            latent_encoder_layers=[1024, 256, 64],
+            latent_decoder_layers=[64, 256, 1024],
+            enc_rnn_size=[2048, 2048],
+            dec_rnn_size=[1024, 1024],
+            free_bits=256,
+            max_beta=0.2,
+        )),
+    note_sequence_augmenter=None,
+    data_converter=trio_16bar_converter,
+    train_examples_path=None,
+    eval_examples_path=None,
+    pretrained_path=None,
+    var_train_pattern=['latent'],
+    encoder_train=False,
+    decoder_train=False
+)
