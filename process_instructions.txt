@@ -1,0 +1,30 @@
+Process for making models for music generation:
+
+conda env create -f audioset-processing/basic_pitch_env.yml
+conda env create -f audioset-processing/audioset_processing_env.yml
+conda env create -f midiMe/midime_env.yaml
+conda env create -f midiMe/magenta_env.yml
+
+mkdir midi_files
+
+conda activate audioset-processing
+
+python audioset-processing/process.py download -c ==tag== -d WAVs
+
+mkdir midi_files/==tag==
+
+conda activate basic-pitch
+
+Get-ChildItem -path "WAVs/==tag==" | ForEach-Object {& basic-pitch midi_files/==tag== $_}
+
+conda activate magenta
+
+convert_dir_to_note_sequences --input_dir=midi_files/==tag== --output_file=music_vae_data/tfrecords/==tag==.tfrecord
+
+conda activate midime
+
+python midime_train.py --config hierdec-trio_16bar --run_dir ..\music_vae_data\==tag==_trio_16_bar\ --mode train --examples_path ..\music_vae_data\tfrecords\==tag==.tfrecord --pretrained_path ..\music_vae_data\pretrained\hierdec-trio_16bar\hierdec-trio_16bar.ckpt --num_steps=200
+
+python midime_generate.py --vae_config=hierdec-trio_16bar --config hierdec-trio_16bar --checkpoint_file ..\music_vae_data\==tag==_trio_16_bar\train\ --vae_checkpoint_file ..\music_vae_data\pretrained\hierdec-trio_16bar\hierdec-trio_16bar.ckpt --num_outputs 1 --output_dir ..\music_vae_data\generated_midi\==tag==_gen_midi
+
+python midiMe/
