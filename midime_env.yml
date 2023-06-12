@@ -1,4 +1,4 @@
-name: igloo_td
+name: midime
 channels:
   - conda-forge
   - defaults
