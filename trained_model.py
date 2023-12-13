@@ -29,7 +29,7 @@ import numpy as np
 from backports import tempfile
 import tensorflow.compat.v1 as tf   # pylint: disable=import-error
 from magenta.common import merge_hparams
-from configs import Config
+from .confbigs import Config
 
 
 def _update_config(config1, config2):
@@ -170,7 +170,7 @@ class TrainedModel(object):
             else:
                 model_saver.restore(self._sess, model_checkpoint_path)
 
-    def sample(self, n=None, length=None, temperature=1.0, same_latent_z=False, c_input=None):
+    def sample(self, n=None, length=None, temperature=1.0, same_latent_z=False, c_input=None, latent_z=None):
         """
         Generates random samples from the model.
         :param n: The number of samples to return. A full batch will be returned if not specified.
@@ -200,25 +200,17 @@ class TrainedModel(object):
             self._max_length: length
         }
 
-        if self._latent_z_input is not None and same_latent_z:
-            latent_z = np.random.randn(latent_z_size).astype(np.float32)
-            latent_z = np.tile(latent_z, (batch_size, 1))
-            feed_dict[self._latent_z_input] = latent_z
-
-        if self._c_input is not None:
-            feed_dict[self._c_input] = c_input
-
         outputs = []
-        for _ in range(int(np.ceil(n / batch_size))):
-            if self._latent_z_input is not None and not same_latent_z:
-                feed_dict[self._latent_z_input] = (
-                    np.random.randn(batch_size, latent_z_size).astype(np.float32)
-                )
-            outputs.append(self._sess.run(self._outputs, feed_dict))
+
+        ###Decoder only takes number of samples equal to batch num as per config,
+        #  so I just pad those values out with random vals
+
+        feed_dict[self._latent_z_input] = (
+                            np.pad(latent_z,[(0,batch_size-1),(0,0)],mode='random_pad')
+                        )
+                        
+        
+        outputs.append(self._sess.run(self._outputs, feed_dict))
         samples = np.vstack(outputs)[:n]
-        if self._c_input is not None:
-            return self._config.data_converter.from_tensors(
-                samples, np.tile(np.expand_dims(c_input, 0), [batch_size, 1, 1])
-            )
 
         return self._config.data_converter.from_tensors(samples)

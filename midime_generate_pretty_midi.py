@@ -29,8 +29,8 @@ from magenta import music as mm
 from magenta.models.music_vae import configs as vae_configs
 import tensorflow.compat.v1 as tf   # pylint: disable=import-error
 
-import configs
-from trained_model import TrainedModel
+from . import configs
+from .trained_model import TrainedModel
 
 
 flags = tf.app.flags
@@ -81,7 +81,18 @@ flags.DEFINE_string(
 )
 
 
-def run(config_map, vae_config_map,):
+def run(genre,
+        vae_config_name,
+        config_name,
+        vae_config_map,
+        config_map,
+        vae_checkpoint_file,
+        checkpoint_file,
+        batch_size,
+        num_outputs,
+        temperature,
+        output_dir):
+    
     """
     Load model params, save config file and start trainer.
     :param config_map: MidiMe dictionary mapping configuration name to Config object.
@@ -91,50 +102,51 @@ def run(config_map, vae_config_map,):
     """
     date_and_time = time.strftime('%Y-%m-%d_%H%M%S')
 
-    if FLAGS.run_dir is None == FLAGS.checkpoint_file is None:
+    if checkpoint_file is None:
         raise ValueError(
-            'Exactly one of `--run_dir` or `--checkpoint_file` must be specified.'
+            '`--checkpoint_file` must be specified.'
         )
-    if FLAGS.vae_checkpoint_file is None:
+    if vae_checkpoint_file is None:
         raise ValueError(
             '`--vae_checkpoint_file` is required.'
         )
-    if FLAGS.output_dir is None:
+    if output_dir is None:
         raise ValueError('`--output_dir` is required.')
-    tf.gfile.MakeDirs(FLAGS.output_dir)
+    
+    tf.gfile.MakeDirs(output_dir)
 
-    if FLAGS.config not in config_map:
-        raise ValueError('Invalid MidiMe config name: %s' % FLAGS.config)
-    config = config_map[FLAGS.config]
-    if FLAGS.vae_config not in vae_config_map:
-        raise ValueError('Invalid MusicVAE config name: %s' % FLAGS.vae_config)
-    vae_config = vae_config_map[FLAGS.vae_config]
+    if config_name not in config_map:
+        raise ValueError('Invalid MidiMe config name: %s' % config_name)
+    config = config_map[config_name]
+    
+    if vae_config_name not in vae_config_map:
+        raise ValueError('Invalid MusicVAE config name: %s' % vae_config_name)
+    vae_config = vae_config_map[vae_config_name]
     config.data_converter.max_tensors_per_item = None
 
-    logging.info('Loading model...')
-    if FLAGS.run_dir:
-        checkpoint_dir_or_path = os.path.expanduser(
-            os.path.join(FLAGS.run_dir, 'train'))
-    else:
-        checkpoint_dir_or_path = os.path.expanduser(FLAGS.checkpoint_file)
-    vae_checkpoint_dir_or_path = os.path.expanduser(FLAGS.vae_checkpoint_file)
+    checkpoint_dir_or_path = os.path.expanduser(checkpoint_file)
+    vae_checkpoint_dir_or_path = os.path.expanduser(vae_checkpoint_file)
+
     model = TrainedModel(
         vae_config=vae_config, model_config=config,
-        batch_size=min(FLAGS.max_batch_size, FLAGS.num_outputs),
+        batch_size=min(batch_size, num_outputs),
         vae_checkpoint_dir_or_path=vae_checkpoint_dir_or_path,
         model_checkpoint_dir_or_path=checkpoint_dir_or_path,
         model_var_pattern=['latent'], session_target='')
 
     logging.info('Sampling...')
-    results = model.sample(
-        n=FLAGS.num_outputs,
+    result = model.sample(
+        n=num_outputs,
         length=config.hparams.max_seq_len,
-        temperature=FLAGS.temperature)
+        temperature=temperature)[0]
+    
+    # save_dir=os.path.abspath(os.path.join(output_dir,date_and_time)+".mid")
+        
+    midi=mm.sequence_proto_to_pretty_midi(result)
 
-    logging.info('Returning midi')
-    rtn_midi=mm.sequence_proto_to_pretty_midi(results)
     logging.info('Done.')
-    return rtn_midi
+
+    return midi
 
 def main(unused_argv):
     """Call generation function."""
